@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hourly RSI Matrix (14)</title>
+
+  <style>
+    :root {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+    body {
+      margin: 0;
+      padding: 14px;
+      background: transparent;
+    }
+    .wrap {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-weight: 800;
+    }
+    .status {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .tile {
+      border-radius: 14px;
+      padding: 12px;
+      border: 1px solid rgba(0,0,0,.12);
+      background: rgba(0,0,0,.03);
+      transition: background 0.2s ease;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .symbol {
+      font-weight: 900;
+      letter-spacing: 0.4px;
+    }
+    .rsi {
+      font-size: 22px;
+      font-weight: 900;
+    }
+    .label {
+      font-size: 12px;
+      opacity: 0.6;
+    }
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="title">Hourly RSI Matrix (14)</div>
+    <div class="status" id="status">Loading…</div>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const TOKENS = [
+  "BTC","ETH","SOL","BNB","XRP","ADA",
+  "DOGE","AVAX","LINK","DOT","TRX","MATIC",
+  "LTC","BCH","ATOM","UNI","ETC","FIL",
+  "APT","ARB","OP","NEAR","INJ","STX"
+];
+
+const BINANCE_BASE = "https://data-api.binance.vision";
+const REFRESH_MS = 60_000;
+
+const grid = document.getElementById("grid");
+const statusEl = document.getElementById("status");
+
+function clamp(x, a, b) {
+  return Math.max(a, Math.min(b, x));
+}
+
+function rsiColor(rsi) {
+  if (rsi > 70) {
+    const t = clamp((rsi - 70) / 30, 0, 1);
+    return `rgba(255,0,0,${0.15 + t * 0.6})`;
+  }
+  if (rsi < 30) {
+    const t = clamp((30 - rsi) / 30, 0, 1);
+    return `rgba(0,170,0,${0.15 + t * 0.6})`;
+  }
+  return "rgba(0,0,0,0.04)";
+}
+
+function computeRSI(closes) {
+  if (closes.length < 15) return NaN;
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= 14; i++) {
+    const d = closes[i] - closes[i-1];
+    if (d > 0) gains += d;
+    else losses -= d;
+  }
+  let avgGain = gains / 14;
+  let avgLoss = losses / 14;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
+
+async function fetchRSI(symbol) {
+  const url = `${BINANCE_BASE}/api/v3/klines?symbol=${symbol}USDT&interval=1h&limit=15`;
+  const data = await fetch(url).then(r => r.json());
+  const closes = data.map(c => Number(c[4]));
+  return computeRSI(closes);
+}
+
+function createTile(symbol) {
+  const el = document.createElement("div");
+  el.className = "tile";
+  el.innerHTML = `
+    <div class="row">
+      <div class="symbol">${symbol}</div>
+      <div class="label">RSI(14)</div>
+    </div>
+    <div class="row">
+      <div></div>
+      <div class="rsi" id="rsi-${symbol}">—</div>
+    </div>
+  `;
+  grid.appendChild(el);
+  return el;
+}
+
+async function update() {
+  statusEl.textContent = "Updating…";
+  for (co
